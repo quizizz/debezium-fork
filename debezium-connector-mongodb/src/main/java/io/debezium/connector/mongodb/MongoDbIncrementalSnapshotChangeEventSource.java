@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import org.apache.kafka.connect.data.Struct;
 import org.bson.BsonDocument;
 import org.bson.Document;
+import org.bson.types.ObjectId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,6 +53,11 @@ public class MongoDbIncrementalSnapshotChangeEventSource
         implements IncrementalSnapshotChangeEventSource<MongoDbPartition, CollectionId> {
 
     private static final String DOCUMENT_ID = "_id";
+
+    private static final String SNAPSHOT_CUSTOM_START_TIME_IN_SECONDS = "start_time_in_seconds";
+
+    private static final String SNAPSHOT_CUSTOM_END_TIME_IN_SECONDS = "end_time_in_seconds";
+
     private static final Logger LOGGER = LoggerFactory.getLogger(MongoDbIncrementalSnapshotChangeEventSource.class);
 
     private final MongoDbConnectorConfig connectorConfig;
@@ -336,7 +342,7 @@ public class MongoDbIncrementalSnapshotChangeEventSource
 
     @Override
     @SuppressWarnings("unchecked")
-    public void addDataCollectionNamesToSnapshot(MongoDbPartition partition, List<String> dataCollectionIds,
+    public void addDataCollectionNamesToSnapshot(io.debezium.document.Document data, MongoDbPartition partition, List<String> dataCollectionIds,
                                                  Optional<String> additionalCondition, Optional<String> surrogateKey, OffsetContext offsetContext)
             throws InterruptedException {
         if (additionalCondition != null && additionalCondition.isPresent()) {
@@ -348,6 +354,26 @@ public class MongoDbIncrementalSnapshotChangeEventSource
         }
 
         context = (IncrementalSnapshotContext<CollectionId>) offsetContext.getIncrementalSnapshotContext();
+
+        if (data != null) {
+            try {
+                if (data.has(SNAPSHOT_CUSTOM_START_TIME_IN_SECONDS)) {
+                    final Object[] key = new Object[]{new ObjectId(data.get(SNAPSHOT_CUSTOM_START_TIME_IN_SECONDS).asInteger(), 0)};
+                    context.nextChunkPosition(key);
+                }
+            } catch (Exception e) {
+                LOGGER.warn("Failed to parse start time from snapshot custom data", e);
+            }
+            try {
+                if (data.has(SNAPSHOT_CUSTOM_END_TIME_IN_SECONDS)) {
+                    final Object[] key = new Object[]{ new ObjectId(data.get(SNAPSHOT_CUSTOM_END_TIME_IN_SECONDS).asInteger(), 0) };
+                    context.maximumKey(key);
+                }
+            } catch (Exception e) {
+                LOGGER.warn("Failed to parse end time from snapshot custom data", e);
+            }
+        }
+
         final boolean shouldReadChunk = !context.snapshotRunning();
         final String rsName = replicaSets.all().get(0).replicaSetName();
         dataCollectionIds = dataCollectionIds

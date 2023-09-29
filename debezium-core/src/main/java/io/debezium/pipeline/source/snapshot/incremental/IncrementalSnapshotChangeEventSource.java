@@ -8,6 +8,7 @@ package io.debezium.pipeline.source.snapshot.incremental;
 import java.util.List;
 import java.util.Optional;
 
+import io.debezium.document.Document;
 import io.debezium.pipeline.spi.OffsetContext;
 import io.debezium.pipeline.spi.Partition;
 import io.debezium.spi.schema.DataCollectionId;
@@ -31,7 +32,7 @@ public interface IncrementalSnapshotChangeEventSource<P extends Partition, T ext
 
     void init(P partition, OffsetContext offsetContext);
 
-    void addDataCollectionNamesToSnapshot(P partition, List<String> dataCollectionIds, Optional<String> additionalCondition, Optional<String> surrogateKey,
+    void addDataCollectionNamesToSnapshot(Document data, P partition, List<String> dataCollectionIds, Optional<String> additionalCondition, Optional<String> surrogateKey,
                                           OffsetContext offsetContext)
             throws InterruptedException;
 
