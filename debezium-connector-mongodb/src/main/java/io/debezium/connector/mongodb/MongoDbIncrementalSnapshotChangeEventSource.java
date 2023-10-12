@@ -21,6 +21,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import io.debezium.document.Value;
 import org.apache.kafka.connect.data.Struct;
 import org.bson.BsonDocument;
 import org.bson.Document;
@@ -422,22 +423,26 @@ public class MongoDbIncrementalSnapshotChangeEventSource
         context = (IncrementalSnapshotContext<CollectionId>) offsetContext.getIncrementalSnapshotContext();
 
         if (data != null) {
+            LOGGER.info("Starting incremental snapshot with data '{}'", data);
             try {
                 if (data.has(SNAPSHOT_CUSTOM_START_TIME_IN_SECONDS)) {
-                    final Object[] key = new Object[]{new ObjectId(data.get(SNAPSHOT_CUSTOM_START_TIME_IN_SECONDS).asInteger(), 0)};
+                    Value startTimeValue = data.get(SNAPSHOT_CUSTOM_START_TIME_IN_SECONDS);
+                    final Object[] key = new Object[]{new ObjectId(Integer.parseInt(startTimeValue.asString()), 0)};
                     context.nextChunkPosition(key);
                 }
             } catch (Exception e) {
-                LOGGER.warn("Failed to parse start time from snapshot custom data", e);
+                LOGGER.error("Failed to parse start time from snapshot custom data", e);
             }
             try {
                 if (data.has(SNAPSHOT_CUSTOM_END_TIME_IN_SECONDS)) {
-                    final Object[] key = new Object[]{ new ObjectId(data.get(SNAPSHOT_CUSTOM_END_TIME_IN_SECONDS).asInteger(), 0) };
+                    Value endTimeValue = data.get(SNAPSHOT_CUSTOM_END_TIME_IN_SECONDS);
+                    final Object[] key = new Object[]{ new ObjectId(Integer.parseInt(endTimeValue.asString()), 0) };
                     context.maximumKey(key);
                 }
             } catch (Exception e) {
-                LOGGER.warn("Failed to parse end time from snapshot custom data", e);
+                LOGGER.error("Failed to parse end time from snapshot custom data", e);
             }
+            LOGGER.info("Incremental snapshot context: {}", context);
         }
 
         final boolean shouldReadChunk = !context.snapshotRunning();
