@@ -24,6 +24,7 @@ import java.util.stream.Collectors;
 import org.apache.kafka.connect.data.Struct;
 import org.bson.BsonDocument;
 import org.bson.Document;
+import org.bson.types.ObjectId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,6 +65,10 @@ public class MongoDbIncrementalSnapshotChangeEventSource
         implements IncrementalSnapshotChangeEventSource<MongoDbPartition, CollectionId> {
 
     private static final String DOCUMENT_ID = "_id";
+
+    private static final String SNAPSHOT_CUSTOM_START_TIME_IN_SECONDS = "start_time_in_seconds";
+
+    private static final String SNAPSHOT_CUSTOM_END_TIME_IN_SECONDS = "end_time_in_seconds";
     private static final Logger LOGGER = LoggerFactory.getLogger(MongoDbIncrementalSnapshotChangeEventSource.class);
 
     private final MongoDbConnectorConfig connectorConfig;
@@ -404,6 +409,7 @@ public class MongoDbIncrementalSnapshotChangeEventSource
         final MongoDbPartition partition = signalPayload.partition;
         final OffsetContext offsetContext = signalPayload.offsetContext;
         final String correlationId = signalPayload.id;
+        final io.debezium.document.Document data = signalPayload.data;
 
         if (!snapshotConfiguration.getAdditionalConditions().isEmpty()) {
             throw new UnsupportedOperationException("Additional condition not supported for MongoDB");
@@ -414,6 +420,26 @@ public class MongoDbIncrementalSnapshotChangeEventSource
         }
 
         context = (IncrementalSnapshotContext<CollectionId>) offsetContext.getIncrementalSnapshotContext();
+
+        if (data != null) {
+            try {
+                if (data.has(SNAPSHOT_CUSTOM_START_TIME_IN_SECONDS)) {
+                    final Object[] key = new Object[]{new ObjectId(data.get(SNAPSHOT_CUSTOM_START_TIME_IN_SECONDS).asInteger(), 0)};
+                    context.nextChunkPosition(key);
+                }
+            } catch (Exception e) {
+                LOGGER.warn("Failed to parse start time from snapshot custom data", e);
+            }
+            try {
+                if (data.has(SNAPSHOT_CUSTOM_END_TIME_IN_SECONDS)) {
+                    final Object[] key = new Object[]{ new ObjectId(data.get(SNAPSHOT_CUSTOM_END_TIME_IN_SECONDS).asInteger(), 0) };
+                    context.maximumKey(key);
+                }
+            } catch (Exception e) {
+                LOGGER.warn("Failed to parse end time from snapshot custom data", e);
+            }
+        }
+
         final boolean shouldReadChunk = !context.snapshotRunning();
         final String rsName = replicaSets.all().get(0).replicaSetName();
         List<String> dataCollectionIds = snapshotConfiguration.getDataCollections()
